@@ -1,0 +1,80 @@
+import pandas as pd
+import requests
+import gspread
+import re
+from oauth2client.service_account import ServiceAccountCredentials
+
+def transform_wordpress_to_shopify(url):
+    rules = [
+        (r'product-categories/', 'collections/'),
+        (r'product/', 'products/'),
+        # Add more rules as needed
+    ]
+    for pattern, replacement in rules:
+        url = re.sub(pattern, replacement, url)
+    return url
+
+def get_url_tokens(url):
+    # Tokenize a URL into words using regex
+    return re.findall(r'\w+', url)
+
+def is_similar(url1, url2, threshold=0.5):
+    tokens1 = set(get_url_tokens(url1))
+    tokens2 = set(get_url_tokens(url2))
+    common_tokens = tokens1.intersection(tokens2)
+    similarity = len(common_tokens) / float(len(tokens1))
+    return similarity >= threshold
+
+# Define scope and credentials
+scope = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive",
+]
+creds = ServiceAccountCredentials.from_json_keyfile_name('python-url-check-a750f2cc99a6.json', scope)
+client = gspread.authorize(creds)
+
+# Google Sheet URL
+google_sheet_url = 'https://docs.google.com/spreadsheets/d/1exhhbwqWAs5PBGAHJ-eynI1gt5CMO0zBs64j5QUCVlA/edit'
+
+# Open the Google Sheet by URL
+sheet = client.open_by_url(google_sheet_url).sheet1
+
+# Shopify homepage
+shopify_homepage = 'https://gnomelands.com/'
+
+# Read the original links from WordPress
+original_links_df = pd.read_excel('Gnomelands_wordpress.xlsx', engine='openpyxl')
+# Read the new links in Shopify
+new_links_df = pd.read_excel('Gnomelands_shopify.xlsx', engine='openpyxl')
+
+# Extract the original links
+original_links = original_links_df['Original Link'].tolist()
+new_links = new_links_df['New Links'].tolist()
+
+# Collect rows to write
+rows_to_write = [['Old URL', 'New URL']]
+url_mapping = {}
+for original_link in original_links:
+    transformed_link = transform_wordpress_to_shopify(original_link)
+    matched_link = next((new_link for new_link in new_links if transformed_link == new_link), None)
+    
+    # If no exact match, look for similar URLs
+    if matched_link is None:
+        matched_link = next((new_link for new_link in new_links if is_similar(transformed_link, new_link)), None)
+        if matched_link is None:
+            matched_link = shopify_homepage
+
+    url_mapping[original_link] = matched_link
+    rows_to_write.append([original_link, matched_link])
+
+# Write all rows at once
+sheet.append_rows(rows_to_write)
+
+# Test redirects
+def test_redirects(url_mapping):
+    for old_url, expected_new_url in url_mapping.items():
+        response = requests.get(old_url)
+        if response.url != expected_new_url:
+            print(f"Redirect failed for {old_url}. Redirected to {response.url} instead of {expected_new_url}.")
+
+test_redirects(url_mapping)
