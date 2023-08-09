@@ -1,0 +1,90 @@
+from google.ads.google_ads.client import GoogleAdsClient
+from google.ads.google_ads.errors import GoogleAdsException
+from google.cloud import language_v1
+from google.cloud.language_v1 import enums
+
+# Initialize the Natural Language API client
+client_nlp = language_v1.LanguageServiceClient()
+
+def analyze_entities(text_content):
+    """
+    Analyze the provided text content and extract entities.
+    """
+    type_ = enums.Document.Type.PLAIN_TEXT
+    document = {"content": text_content, "type": type_, "language": "en"}
+
+    response = client_nlp.analyze_entities(document)
+    
+    entities = []
+    for entity in response.entities:
+        entities.append(entity.name)
+    
+    return entities
+
+def fetch_keyword_ideas(client_ads, customer_id, keyword_text):
+    keyword_plan_idea_service = client_ads.get_service("KeywordPlanIdeaService")
+
+    # Build a seed keyword
+    keyword_seed = client_ads.get_type("KeywordSeed")
+    keyword_seed.keywords.append(keyword_text)
+
+    # Build keyword plan idea request
+    request = client_ads.get_type("GenerateKeywordIdeasRequest")
+    request.customer_id = customer_id
+    request.language = "en"
+    request.geo_target_constants.append("locations/2840")  # Example for United States
+    request.keyword_plan_network = client_ads.get_type("KeywordPlanNetworkEnum").GOOGLE_SEARCH_AND_PARTNERS
+    request.keyword_and_url_seed.keyword_seed.CopyFrom(keyword_seed)
+
+    # Fetch keyword ideas
+    keyword_ideas = keyword_plan_idea_service.generate_keyword_ideas(request=request)
+
+    # For simplicity, just get the first idea's search volume
+    for idea in keyword_ideas:
+        return idea.text, idea.keyword_idea_metrics.avg_monthly_searches
+
+    return None, None
+
+def generate_blog_titles(topic, main_keyword, secondary_keyword):
+    templates = [
+        f"How {topic} Can Benefit from {{main_keyword}}",
+        f"{topic}: A Comprehensive Guide to {{main_keyword}}",
+        f"10 {topic} Mistakes to Avoid with {{main_keyword}} and {{secondary_keyword}}",
+        f"Why Every {topic} Should Know About {{main_keyword}} and {{secondary_keyword}}",
+        f"Exploring {topic} with {{main_keyword}}: Expert Tips"
+    ]
+
+    titles = [template.format(main_keyword=main_keyword, secondary_keyword=secondary_keyword) for template in templates]
+    return titles
+
+def keyword_tool():
+    # Initialize Google Ads client
+    client_ads = GoogleAdsClient.load_from_storage()
+
+    topic = input("Enter the main topic for your blog: ")
+    blog_content = input("Enter a brief content or title for your blog: ")
+    
+    # Extract entities (potential keywords) from the blog content
+    keywords = analyze_entities(blog_content)
+    
+    # Consider the first entity as the main keyword and the second as the secondary keyword
+    main_keyword = keywords[0] if len(keywords) > 0 else None
+    secondary_keyword = keywords[1] if len(keywords) > 1 else None
+    
+    # Get keyword search volumes from Google Ads API
+    main_keyword, main_keyword_volume = fetch_keyword_ideas(client_ads, 'YOUR_CUSTOMER_ID', main_keyword) if main_keyword else (None, None)
+    secondary_keyword, secondary_keyword_volume = fetch_keyword_ideas(client_ads, 'YOUR_CUSTOMER_ID', secondary_keyword) if secondary_keyword else (None, None)
+    
+    # Generate potential blog titles
+    blog_titles = generate_blog_titles(topic, main_keyword, secondary_keyword)
+
+    # Display information
+    print("\nGenerated Blog Titles:")
+    for title in blog_titles:
+        print("-", title)
+    print("\nMain Keyword:", main_keyword)
+    print("Search Volume (Main):", main_keyword_volume)
+    print("Secondary Keyword:", secondary_keyword)
+    print("Search Volume (Secondary):", secondary_keyword_volume)
+
+keyword_tool()
