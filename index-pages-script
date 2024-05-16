@@ -52,7 +52,7 @@ indexed_counts = []
 
 for row in response.get('rows', []):
     dates.append(row['keys'][0])  # Date
-    indexed_counts.append(int(row['clicks']))  # Number of indexed pages, assuming 'clicks' is correct
+    indexed_counts.append(int(row['impressions']))  # Number of indexed pages, assuming 'impressions' is correct
 
 # Plotting the data
 plt.figure(figsize=(10, 5))
