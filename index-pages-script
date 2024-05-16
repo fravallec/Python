@@ -1,0 +1,65 @@
+from google_auth_oauthlib.flow import InstalledAppFlow
+from googleapiclient.discovery import build
+from google.auth.transport.requests import Request
+import os
+import pickle
+import matplotlib.pyplot as plt
+from datetime import datetime, timedelta
+
+# Path to the OAuth 2.0 client JSON file
+CLIENT_SECRET_FILE = 'path_to_your_service_account_key.json'
+SCOPES = ['https://www.googleapis.com/auth/webmasters']
+
+# Load credentials from a file if they exist, otherwise go through the authorization flow
+creds = None
+if os.path.exists('token.pickle'):
+    with open('token.pickle', 'rb') as token:
+        creds = pickle.load(token)
+# If there are no valid credentials available, go through the authorization flow
+if not creds or not creds.valid:
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    else:
+        flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRET_FILE, SCOPES)
+        creds = flow.run_local_server(port=0)
+    # Save the credentials for the next run
+    with open('token.pickle', 'wb') as token:
+        pickle.dump(creds, token)
+
+# Build the service
+service = build('webmasters', 'v3', credentials=creds)
+
+# Your additional code here to interact with the Google Search Console API
+SITE_URL = ''https://www.example.com/''
+
+# Dates for the last three months
+end_date = datetime.now().strftime('%Y-%m-%d')
+start_date = (datetime.now() - timedelta(days=90)).strftime('%Y-%m-%d')
+
+# Query the API for index status
+request = {
+    'startDate': start_date,
+    'endDate': end_date,
+    'dimensions': ['date'],  # Fetch data by date
+    'rowLimit': 2500  # Adjust based on expected data size
+}
+
+response = service.searchanalytics().query(siteUrl=SITE_URL, body=request).execute()
+
+# Parse the response to extract data
+dates = []
+indexed_counts = []
+
+for row in response.get('rows', []):
+    dates.append(row['keys'][0])  # Date
+    indexed_counts.append(int(row['clicks']))  # Number of indexed pages, assuming 'clicks' is correct
+
+# Plotting the data
+plt.figure(figsize=(10, 5))
+plt.plot(dates, indexed_counts, marker='o', linestyle='-', color='b')
+plt.title('Indexed Pages Over the Last Three Months')
+plt.xlabel('Date')
+plt.ylabel('Number of Indexed Pages')
+plt.xticks(rotation=45)
+plt.tight_layout()
+plt.show()
