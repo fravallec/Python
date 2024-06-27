@@ -1,0 +1,49 @@
+import pandas as pd
+import openpyxl
+import requests
+
+def get_http_status(url):
+    try:
+        response = requests.head(url, allow_redirects=True)
+        return response.status_code
+    except requests.RequestException as e:
+        print(f"Error fetching {url}: {e}")
+        return None
+
+def update_status_codes(excel_file_path):
+    try:
+        # Read the Excel file
+        df = pd.read_excel(excel_file_path)
+        print("Excel file read successfully.")
+        
+        # Check if the "HTTP Status" column exists, if not create it
+        if 'HTTP Status' not in df.columns:
+            df['HTTP Status'] = None
+
+        # Iterate over the URLs and fetch the status codes
+        for idx, row in df.iterrows():
+            url = row['URL']
+            if pd.notna(url):
+                print(f"Processing URL: {url}")
+                status_code = get_http_status(url)
+                df.at[idx, 'HTTP Status'] = status_code
+                print(f"URL: {url} - Status Code: {status_code}")
+
+        # Save the updated DataFrame back to the Excel file
+        df.to_excel(excel_file_path, index=False)
+        print("Excel file updated successfully.")
+        
+    except FileNotFoundError:
+        print(f"File not found: {excel_file_path}")
+    except PermissionError:
+        print(f"Permission denied: {excel_file_path}. Please close the file if it is open in another program.")
+    except ImportError as e:
+        print(f"Import error: {e}")
+    except Exception as e:
+        print(f"An error occurred: {e}")
+
+# Path to your Excel file
+excel_file_path = r'C:\Users\Francesco\Downloads\Coca-Cola-HTTP-STATUS.xlsx'
+
+# Update the status codes
+update_status_codes(excel_file_path)
